@@ -1,135 +1,179 @@
-# 🤖 WhatsApp Gemini Agent (Sufi_vela)
+# 🤖 WhatsApp Gemini Agent
 
-An intelligent, production-grade conversational AI assistant connecting the **WhatsApp Agent Platform** (`https://api.whatsapp.com/agent/v1`) directly to **Google Gemini LLM** using modern Google GenAI SDK with multi-key failover and resilient state handling.
+[![CI Pipeline](https://github.com/Muhammad08-dot/whatsapp_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammad08-dot/whatsapp_agent/actions)
+[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
+[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Linting: Ruff](https://img.shields.io/badge/lint-ruff-orange.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
----
+An enterprise-grade, high-availability conversational AI agent integrating the **WhatsApp Agent Platform** (`https://api.whatsapp.com/agent/v1`) with **Google Gemini LLM** using the official Google GenAI SDK. 
 
-## 🌟 Key Features
-
-- **WhatsApp Agent Platform Spec Compliance**: Built strictly around `https://api.whatsapp.com/agent/v1` with Bearer auth, `user:<id>` validation, 4096-character reply splitting, and status receipt handling.
-- **Sequential Multi-Key Rotation**: Supports 1 to 20 Gemini API keys in `.env`. Stays on the first working key, and fails over sequentially when encountering 429 rate limits with automatic 65s or Pacific midnight quota cooldowns.
-- **Model Fallback Chain**: Dynamically switches models (`gemini-3.5-flash`, `gemini-3.8-flash`, `gemini-3.7-flash`, etc.) when models return 404 NOT_FOUND. Remembers unavailable `(key, model)` pairs without redundant retries.
-- **Poison-Message Immunity**: A failing message is caught gracefully, logged with masked message IDs, answered with a courteous technical error response, and marked handled so batches never loop forever.
-- **Sliding-Window Rate Limiting**: Enforces strict WhatsApp rate limits (12 requests/min for sends & statuses; 15 requests/min for long-polling).
-- **Atomic State Persistence**: Tracks `next_offset` and handled message IDs in `state.json` atomically, committing offsets only after every message in a batch has been processed.
-- **Graceful Shutdown**: Responsive signal handling (`SIGINT`, `SIGTERM`) exits cleanly between iterations, saves state atomically, and closes HTTP sessions.
-- **Privacy & Secret Masking**: Masks sensitive API keys, bearer tokens, and `wamid` message IDs across all status reports and logs.
-- **Fast Test Suite**: Comprehensive mocked test suite executing in under 2.5 seconds.
+Engineered for 24/7 resilience with sequential multi-key rotation, dynamic model fallback chains, sliding-window rate limiting, and atomic state recovery.
 
 ---
 
-## 🏗️ Architecture One-Liner
+## 🌟 Key Highlights
 
-Long-poll WhatsApp `/updates` -> Deduplicate via `state.json` -> Retrieve context via `data/` -> Generate reply via sequential-failover `GeminiClient` -> Dispatch to WhatsApp `/messages` -> Commit offset atomically.
+- **WhatsApp Agent Platform Compliant**: Strict adherence to the platform spec (Bearer authentication, `user:<id>` identity preservation, auto-splitting messages exceeding 4,096 characters, and status receipt processing).
+- **Sequential Multi-Key Failover**: Automatically rotates across up to 20 Gemini API keys. Stays on the active key while healthy, and triggers automated 65-second (or Pacific midnight daily quota) cooldowns on HTTP 429 (`RESOURCE_EXHAUSTED`).
+- **Dynamic Model Fallback Chain**: Caches unavailable `(key, model)` pairs on HTTP 404 and transitions gracefully across fallback models (`gemini-3.5-flash` → `gemini-3.8-flash` → `gemini-3.7-flash` → `gemini-2.5-flash`).
+- **Poison-Message Resilience**: Isolated exception handling ensures that any single failing message is courteously answered, marked handled, and logged with masked IDs without blocking the batch or causing infinite replay loops.
+- **Atomic Offset & State Persistence**: Guarantees zero dropped or duplicated messages across server restarts by advancing `next_offset` only after all messages in a batch are processed.
+- **Sliding-Window Rate Limiting**: Built-in token bucket throttlers strictly enforce WhatsApp rate limits (12 calls/min for sends, 15 calls/min for long-polling).
+- **Graceful Shutdown**: Intercepts `SIGINT` and `SIGTERM` to safely finish active messages, persist state, and cleanly close network sessions.
+- **Enterprise Privacy**: Automated masking of credentials, tokens, and `wamid` message IDs across status reports and application logs.
 
 ---
 
-## 📁 Project Structure
+## 🏗️ Architecture & Data Flow
+
+```text
+       ┌────────────────────────────────────────────────────────┐
+       │                WhatsApp Agent Platform                 │
+       │           (https://api.whatsapp.com/agent/v1)          │
+       └──────────────┬───────────────────────────▲─────────────┘
+                      │ Long-Poll (/updates)      │ Send (/messages)
+                      ▼                           │
+             ┌─────────────────┐         ┌────────┴─────────┐
+             │ WhatsAppClient  │         │ Rate Limiter     │
+             │   (Transport)   │         │  (12 req/min)    │
+             └────────┬────────┘         └────────▲─────────┘
+                      │ Messages                  │ Outbound Text
+                      ▼                           │
+             ┌────────────────────────────────────┴─────────┐
+             │                 WhatsAppAgent                │
+             │            (Core Orchestrator)               │
+             └───┬────────────────────────────┬─────────────┘
+                 │ State & Dedup              │ Context & Inference
+                 ▼                            ▼
+        ┌─────────────────┐          ┌──────────────────────┐
+        │  StateManager   │          │     GeminiClient     │
+        │  (state.json)   │          │ (Sequential Failover)│
+        └─────────────────┘          └──────────┬───────────┘
+                                                │
+                                       ┌────────┴────────┐
+                                       │ Google GenAI    │
+                                       │ (1 to 20 Keys)  │
+                                       └─────────────────┘
+```
+
+---
+
+## 📁 Repository Structure
 
 ```text
 whatsapp_gemini_agent/
 ├── .github/
-│   └── workflows/ci.yml     # Automated CI (Python 3.13, ruff, black, pytest)
-├── data/                    # Knowledge documents & bot instructions
-│   ├── profile.md           # Bot identity and personality
-│   ├── commands.md          # Facts and command descriptions
-│   └── faq.md               # User-editable FAQ template
+│   └── workflows/ci.yml     # Automated CI testing on Python 3.13
+├── data/                    # Knowledge base & persona documents
+│   ├── commands.md          # Reference of bot commands and capabilities
+│   ├── faq.md               # Customizable FAQ template
+│   └── profile.md           # Bot personality, identity, and tone
 ├── tests/                   # Pytest automated test suite
-│   ├── conftest.py          # Shared fixtures (fake keys, mock clients, tmp state)
-│   ├── test_agent.py        # Agent orchestration, commands, and poison message tests
-│   ├── test_gemini_client.py# Multi-key rotation, 404 caching, and cooldown tests
-│   ├── test_rate_limiter.py # Sliding-window rate limiter tests
-│   ├── test_state_manager.py# Atomic file persistence and deduplication tests
-│   └── test_whatsapp_client.py # WhatsApp transport and spec compliance tests
-├── logs/                    # Rotating log files (agent.log)
-├── .dockerignore            # Docker build ignore rules
-├── .env.example             # Environment configuration template
-├── .gitignore               # Secret and cache ignore rules
-├── Dockerfile               # Production container image (python:3.13-slim, non-root)
-├── agent.py                 # Core orchestration logic
-├── config.py                # Centralized settings and constants
+│   ├── conftest.py          # Shared fixtures (mock clients, tmp state)
+│   ├── test_agent.py        # Poison messages, commands, offset safety
+│   ├── test_gemini_client.py# Key rotation, model fallbacks, cooldowns
+│   ├── test_rate_limiter.py # Sliding-window rate limiting tests
+│   ├── test_state_manager.py# Atomic JSON persistence tests
+│   └── test_whatsapp_client.py # Transport, payload splitting, spec checks
+├── logs/                    # Rotating application logs (ignored by git)
+├── .dockerignore            # Docker exclusion rules
+├── .env.example             # Clean environment configuration template
+├── .gitignore               # Strict exclusion rules for secrets and caches
+├── Dockerfile               # Production container definition (non-root)
+├── Makefile                 # Common execution targets
+├── README.md                # Project documentation
+├── agent.py                 # Core orchestration loop
+├── config.py                # Centralized configuration and constants
+├── exceptions.py            # Custom exception hierarchy
 ├── gemini_client.py         # Gemini SDK client with sequential key failover
-├── knowledge_base.py        # Keyword relevance document search
-├── main.py                  # Poll loop, signal handling, and entry point
+├── knowledge_base.py        # Document search & context injection
+├── main.py                  # Process entry point, signal handlers, logging
 ├── models.py                # Typed dataclasses (IncomingMessage, StatusUpdate)
-├── prompts.py               # System prompts and instructions
-├── rate_limiter.py          # Token-bucket sliding window rate limiter
-├── requirements.txt         # Production dependencies
-├── requirements-dev.txt     # Development and testing dependencies
-├── state_manager.py         # Atomic state persistence
-└── whatsapp_client.py       # WhatsApp Agent Platform transport client
+├── prompts.py               # Dynamic prompt assembly
+├── pytest.ini               # Test runner configuration
+├── rate_limiter.py          # Sliding-window rate limiter
+├── requirements.txt         # Core production dependencies
+├── requirements-dev.txt     # Linting and testing dependencies
+├── ruff.toml                # Ruff linter configuration
+├── run.bat                  # Windows convenience launcher
+├── state_manager.py         # Atomic state file manager
+└── whatsapp_client.py       # WhatsApp Agent Platform HTTP transport
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## ⚙️ Configuration
 
-All settings are configured via `.env` (copy from `.env.example`):
+Create your `.env` file by copying [.env.example](file:///.env.example):
+```bash
+cp .env.example .env
+```
 
-| Variable | Required | Default | Description |
-|:---|:---:|:---|:---|
-| `WHATSAPP_API_TOKEN` | **Yes** | — | Bearer token from WhatsApp mobile app (Settings > Agents > Chat info > API key). |
-| `GEMINI_API_KEYS` | **Yes** | — | Comma-separated Gemini API keys (supports 1 to 20 keys). |
-| `GEMINI_MODEL` | No | `gemini-3.5-flash` | Primary Gemini model name. |
-| `GEMINI_MODELS` | No | `gemini-3.5-flash,gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash` | Fallback models chain. |
-| `STATE_FILE` | No | `state.json` | Path to persistent state file (mount to a volume for Docker). |
-| `AGENT_NAME` | No | `Sufi_vela` | Name of the assistant displayed in logs and prompts. |
-| `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+### Environment Parameters
+
+| Variable | Type | Required | Default | Description |
+|:---|:---:|:---:|:---|:---|
+| `WHATSAPP_API_TOKEN` | String | **Yes** | — | Bearer token from WhatsApp App > Settings > Agents > Chat info > API key. |
+| `GEMINI_API_KEYS` | String | **Yes** | — | Comma-separated Gemini API keys (supports 1 to 20 keys with automatic failover). |
+| `GEMINI_MODEL` | String | No | `gemini-3.5-flash` | Primary Gemini model for inference. |
+| `GEMINI_MODELS` | String | No | `gemini-3.5-flash,gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash` | Fallback model chain. |
+| `STATE_FILE` | String | No | `state.json` | Path to the persistent state file (mount to a persistent volume for Docker). |
+| `AGENT_NAME` | String | No | `Sufi_vela` | Persona name displayed in system prompts and logs. |
+| `LOG_LEVEL` | String | No | `INFO` | Application log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 
 > [!WARNING]
-> **CRITICAL SECURITY RULE:** NEVER commit `.env` to Git or share raw contents. All logs and status reports automatically mask sensitive tokens as `abcd...wxyz`.
+> **CRITICAL SECURITY REQUIREMENT:** Never commit `.env` or expose API keys. The codebase automatically masks all keys, tokens, and `wamid` IDs across logs and status outputs.
 
 > [!CAUTION]
-> **SINGLE INSTANCE ONLY:** NEVER run two agent instances simultaneously on the same WhatsApp API token. Running multiple pollers causes HTTP 409 Conflict errors, duplicate replies, and out-of-order offset advancement.
+> **SINGLE INSTANCE ENFORCEMENT:** Never run multiple agent processes with the same `WHATSAPP_API_TOKEN`. Polling WhatsApp concurrently from two processes triggers `HTTP 409 Conflict` errors and out-of-order state offsets.
 
 ---
 
-## 🤖 Bot Commands
+## 💬 Chat Commands
 
-Users or bot admins can issue direct slash commands in the WhatsApp chat:
+Users can interact with special commands directly inside the WhatsApp conversation:
 
-- `/status`: Sends an instant diagnostic report showing total loaded keys, active key index, per-key health (OK, Cooldown seconds remaining, Disabled), and available models. All secrets remain masked.
-- `/reset`: Clears the user's active conversational memory history, starting a clean conversational context.
+- `/status` — Delivers a diagnostic summary displaying active key index, per-key operational states (OK, Cooldown remaining, Disabled), and model availability. (All keys remain masked).
+- `/reset` — Clears conversation history and memory for the user, starting a fresh conversation context.
 
 ---
 
-## 🚀 Setup & Local Execution
+## 🚀 Quickstart Guide
 
 ### 1. Install Dependencies
-```powershell
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
-### 2. Configure Environment
-Copy `.env.example` to `.env` and insert your actual keys:
-```powershell
-cp .env.example .env
-```
-
-### 3. Run Agent
-```powershell
-python main.py
-```
-
-### 4. Run Verification Suite
-```powershell
+### 2. Run Verification Suite
+```bash
+# Execute unit tests
 pytest -v
+
+# Run linter and formatter validation
 ruff check .
 black --check .
 ```
 
+### 3. Launch the Agent
+```bash
+python main.py
+```
+
 ---
 
-## 🐳 Running 24/7 with Docker or on a VPS
+## 🐳 Production Deployment (Docker & 24/7 VPS)
 
-To run the agent 24/7 reliably, use Docker with an external volume to persist `state.json` across container restarts:
+For production environments, containerize the application and mount a volume to persist `state.json`:
 
 ```bash
-# 1. Build the Docker image
+# 1. Build the production image
 docker build -t whatsapp-gemini-agent .
 
-# 2. Run container with environment file and persistent data volume
+# 2. Run container with persistent storage
 docker run -d \
   --name whatsapp-gemini-agent \
   --restart unless-stopped \
@@ -139,22 +183,30 @@ docker run -d \
   whatsapp-gemini-agent
 ```
 
-To view live masked logs:
+View real-time masked logs:
 ```bash
 docker logs -f whatsapp-gemini-agent
 ```
 
 ---
 
-## 🛠️ Troubleshooting & Status Codes
+## 🛠️ Diagnostics & HTTP Status Codes
 
-| Error / Code | Root Cause | Automatic Agent Action & Resolution |
-|:---|:---|:---|
-| **204 No Content** | Poll timeout (no new messages) | Normal WhatsApp long-polling behavior; agent continues polling. |
-| **401 / 403 (WhatsApp)** | Invalid or expired WhatsApp token | Check `WHATSAPP_API_TOKEN` in `.env`. Regenerate key in WhatsApp mobile app. |
-| **401 / 403 (Gemini)** | `API_KEY_INVALID` or permission error | Key is permanently disabled for this run. Other valid keys continue serving. |
-| **404 NOT_FOUND (Gemini)** | Model retired or unavailable | Marked in `unavailable_pairs`; agent tries next key on same model or falls back to next model. |
-| **409 Conflict (WhatsApp)** | Another polling process is active | **Stop all other running instances!** Only one poller can query an agent token at a time. |
-| **429 Rate Limit (Gemini)** | RPM or daily TPM/RPD quota reached | Key enters 65s cooldown (or until Pacific midnight for daily limits); agent immediately fails over to next key. |
-| **429 Rate Limit (WhatsApp)** | Outbound/polling frequency exceeded | Token bucket rate limiter automatically throttles and backs off with jitter. |
-| **500 / 503 Service Unavailable** | Upstream WhatsApp/Gemini temporary error | Retried once carefully with exponential backoff; if persistent, friendly Urdu error returned. |
+| Status Code | Component | Cause | Agent Handling |
+|:---|:---:|:---|:---|
+| **200 / 201** | WhatsApp | Successful request | Message dispatched or updates parsed. |
+| **204** | WhatsApp | Poll timeout (no messages) | Standard long-poll behavior; immediately continues next poll cycle. |
+| **400** | Gemini | `INVALID_ARGUMENT` | Logged as bad request; returns polite error without disabling key or burning other keys. |
+| **401 / 403** | WhatsApp | Expired or invalid token | Logged as critical authentication failure. Regenerate key from WhatsApp mobile app. |
+| **401 / 403** | Gemini | `API_KEY_INVALID` | Offending key is permanently disabled for the run. Other keys continue serving. |
+| **404** | Gemini | Model unavailable / retired | Cached in `unavailable_pairs`; attempts other keys on the same model or falls back to next model. |
+| **409** | WhatsApp | Concurrent polling conflict | Another process is polling the same token. Stop the other instance immediately. |
+| **429** | WhatsApp | Rate limit exceeded | Token-bucket rate limiter throttles and retries with exponential backoff and jitter. |
+| **429** | Gemini | `RESOURCE_EXHAUSTED` | Key enters 65s cooldown (or until Pacific midnight if daily quota); immediately fails over to next key. |
+| **5xx** | Both | Transient service error | Retried once with backoff; falls back to friendly error message if unresolved. |
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
