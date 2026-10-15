@@ -1,0 +1,17 @@
+.env
+.env.*
+state.json
+state.json.tmp
+logs/
+*.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.git/
+.github/
+tests/
+venv/
+.venv/
