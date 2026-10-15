@@ -13,8 +13,7 @@ import time
 import gradio as gr
 
 from agent import WhatsAppAgent
-from config import AGENT_NAME, GEMINI_MODEL, mask_secret, WHATSAPP_API_TOKEN
-from gemini_client import GeminiClient
+from config import AGENT_NAME, GEMINI_MODEL, WHATSAPP_API_TOKEN, mask_secret
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hf_space")
