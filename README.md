@@ -1,3 +1,14 @@
+---
+title: WhatsApp Gemini Agent
+emoji: 🤖
+colorFrom: green
+colorTo: blue
+sdk: gradio
+sdk_version: 5.20.0
+app_file: app.py
+pinned: false
+---
+
 # 🤖 WhatsApp Gemini Agent
 
 [![CI Pipeline](https://github.com/Muhammad08-dot/whatsapp_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammad08-dot/whatsapp_agent/actions)
