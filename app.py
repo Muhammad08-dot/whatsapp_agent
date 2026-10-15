@@ -12,6 +12,17 @@ import time
 
 import gradio as gr
 
+try:
+    import spaces
+
+    @spaces.GPU
+    def dummy_gpu_worker():
+        """Satisfies Hugging Face ZeroGPU startup verification."""
+        return True
+
+except ImportError:
+    spaces = None
+
 from agent import WhatsAppAgent
 from config import AGENT_NAME, GEMINI_MODEL, WHATSAPP_API_TOKEN, mask_secret
 
@@ -43,8 +54,13 @@ def run_agent_loop():
 
 
 def start_worker():
-    """Ensure worker thread is active."""
+    """Ensure worker thread is active and trigger ZeroGPU verification."""
     global agent_thread
+    if spaces is not None:
+        try:
+            dummy_gpu_worker()
+        except Exception:
+            pass
     if agent_thread is None or not agent_thread.is_alive():
         agent_thread = threading.Thread(target=run_agent_loop, daemon=True)
         agent_thread.start()
