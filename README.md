@@ -12,6 +12,7 @@ pinned: false
 # 🤖 WhatsApp Gemini Agent
 
 [![CI Pipeline](https://github.com/Muhammad08-dot/whatsapp_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Muhammad08-dot/whatsapp_agent/actions)
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces%20Live-yellow)](https://huggingface.co/spaces/mabdullahramday56/whatsapp-agent)
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Linting: Ruff](https://img.shields.io/badge/lint-ruff-orange.svg)](https://github.com/astral-sh/ruff)
@@ -20,6 +21,8 @@ pinned: false
 An enterprise-grade, high-availability conversational AI assistant connecting the **WhatsApp Agent Platform** (`https://api.whatsapp.com/agent/v1`) directly to **Google Gemini LLM** using the official Google GenAI SDK.
 
 Engineered for 24/7 resilience with sequential multi-key rotation, dynamic model fallback chains, sliding-window rate limiting, and atomic state recovery.
+
+> 🌐 **Live Cloud Space:** Hosted 24/7 on [Hugging Face Spaces (ZeroGPU Free Tier)](https://huggingface.co/spaces/mabdullahramday56/whatsapp-agent).
 
 ---
 
